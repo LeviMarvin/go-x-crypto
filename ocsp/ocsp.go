@@ -92,6 +92,7 @@ type tbsRequest struct {
 	Version       int              `asn1:"explicit,tag:0,default:0,optional"`
 	RequestorName pkix.RDNSequence `asn1:"explicit,tag:1,optional"`
 	RequestList   []request
+	ExtensionList []pkix.Extension `asn1:"explicit,tag:2,optional"`
 }
 
 type request struct {
@@ -416,27 +417,29 @@ func (p ParseError) Error() string {
 	return string(p)
 }
 
-// ParseRequest parses an OCSP request in DER form. It only supports
+// ParseRequestWithExtensions parses an OCSP request in DER form. It only supports
 // requests for a single certificate. Signed requests are not supported.
 // If a request includes a signature, it will result in a ParseError.
-func ParseRequest(bytes []byte) (*Request, error) {
+// It returns the unmodified pkix extensions. If you do not need the extensions
+// Then use the ParseRequest function
+func ParseRequestWithExtensions(bytes []byte) (*Request, []pkix.Extension, error) {
 	var req ocspRequest
 	rest, err := asn1.Unmarshal(bytes, &req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(rest) > 0 {
-		return nil, ParseError("trailing data in OCSP request")
+		return nil, nil, ParseError("trailing data in OCSP request")
 	}
 
 	if len(req.TBSRequest.RequestList) == 0 {
-		return nil, ParseError("OCSP request contains no request body")
+		return nil, nil, ParseError("OCSP request contains no request body")
 	}
 	innerRequest := req.TBSRequest.RequestList[0]
 
 	hashFunc := getHashAlgorithmFromOID(innerRequest.Cert.HashAlgorithm.Algorithm)
 	if hashFunc == crypto.Hash(0) {
-		return nil, ParseError("OCSP request uses unknown hash function")
+		return nil, nil, ParseError("OCSP request uses unknown hash function")
 	}
 
 	return &Request{
@@ -444,7 +447,14 @@ func ParseRequest(bytes []byte) (*Request, error) {
 		IssuerNameHash: innerRequest.Cert.NameHash,
 		IssuerKeyHash:  innerRequest.Cert.IssuerKeyHash,
 		SerialNumber:   innerRequest.Cert.SerialNumber,
-	}, nil
+	}, req.TBSRequest.ExtensionList, nil
+}
+
+// ParseRequest returns the request and error from ParseRequestWithExtensions
+// It is mostly for compatability, as ParseRequestWithExtensions was added later
+func ParseRequest(bytes []byte) (*Request, error) {
+	req, _, err := ParseRequestWithExtensions(bytes)
+	return req, err
 }
 
 // ParseResponse parses an OCSP response in DER form. The response must contain
