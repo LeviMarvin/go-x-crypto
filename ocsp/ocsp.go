@@ -117,11 +117,12 @@ type basicResponse struct {
 }
 
 type responseData struct {
-	Raw            asn1.RawContent
-	Version        int `asn1:"optional,default:0,explicit,tag:0"`
-	RawResponderID asn1.RawValue
-	ProducedAt     time.Time `asn1:"generalized"`
-	Responses      []singleResponse
+	Raw                asn1.RawContent
+	Version            int `asn1:"optional,default:0,explicit,tag:0"`
+	RawResponderID     asn1.RawValue
+	ProducedAt         time.Time `asn1:"generalized"`
+	Responses          []singleResponse
+	ResponseExtensions []pkix.Extension `asn1:"explicit,tag:1,optional"`
 }
 
 type singleResponse struct {
@@ -387,6 +388,11 @@ type Response struct {
 	// ExtraExtensions field is not populated when parsing certificates, see
 	// Extensions.
 	ExtraExtensions []pkix.Extension
+
+	// ResponseExtensions contains extensions to be copied, raw, into any marshaled
+	// OCSP response (in the singleExtensions field). Values override any
+	// extensions that would otherwise be produced based on the other fields
+	ResponseExtensions []pkix.Extension
 }
 
 // These are pre-serialized error responses for the various non-success codes
@@ -539,6 +545,7 @@ func ParseResponseForCert(bytes []byte, cert, issuer *x509.Certificate) (*Respon
 		ProducedAt:         basicResp.TBSResponseData.ProducedAt,
 		ThisUpdate:         singleResp.ThisUpdate,
 		NextUpdate:         singleResp.NextUpdate,
+		ResponseExtensions: basicResp.TBSResponseData.ResponseExtensions,
 	}
 
 	// Handle the ResponderID CHOICE tag. ResponderID can be flattened into
@@ -751,10 +758,11 @@ func CreateResponse(issuer, responderCert *x509.Certificate, template Response, 
 		Bytes:      responderCert.RawSubject,
 	}
 	tbsResponseData := responseData{
-		Version:        0,
-		RawResponderID: rawResponderID,
-		ProducedAt:     time.Now().Truncate(time.Minute).UTC(),
-		Responses:      []singleResponse{innerResponse},
+		Version:            0,
+		RawResponderID:     rawResponderID,
+		ProducedAt:         time.Now().Truncate(time.Minute).UTC(),
+		Responses:          []singleResponse{innerResponse},
+		ResponseExtensions: template.ResponseExtensions,
 	}
 
 	tbsResponseDataDER, err := asn1.Marshal(tbsResponseData)
