@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build aix || darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris
-// +build aix darwin dragonfly freebsd linux netbsd openbsd solaris
 
 package test
 
@@ -20,7 +19,7 @@ func TestCertLogin(t *testing.T) {
 	s := newServer(t)
 
 	// Use a key different from the default.
-	clientKey := testSigners["dsa"]
+	clientKey := testSigners["ed25519"]
 	caAuthKey := testSigners["ecdsa"]
 	cert := &ssh.Certificate{
 		Key:             clientKey.PublicKey(),
